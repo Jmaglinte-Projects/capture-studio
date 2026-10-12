@@ -1,0 +1,1 @@
+{"manifest_version": 3, "name": "Capture Studio", "version": "1.0.0", "description": "Record screens and capture scrolling pages locally.", "permissions": ["activeTab", "scripting", "storage", "unlimitedStorage"], "action": {"default_popup": "popup.html"}, "background": {"service_worker": "background.js"}}
