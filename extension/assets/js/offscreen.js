@@ -1,0 +1,40 @@
+import {captureOperation,notifyCaptures} from './capture-store.js';
+let phase='idle',recorder=null,resources=[],hardware=null,audio=null,renderTimer=null,tickTimer=null,started=0,pausedAt=0,pausedTotal=0,options={},metadata={},lastCaptureId=null,error='',warning='',generation=0;
+const activePhases=['preparing','countdown','recording','paused','saving'];
+function elapsed(){return started?Math.max(0,(pausedAt||Date.now())-started-pausedTotal):0}
+function state(){return{phase,elapsed:elapsed(),meta:metadata,captureId:lastCaptureId,error,warning}}
+function emit(){chrome.runtime.sendMessage({action:'record-state',state:state()}).catch(()=>{})}
+function hold(stream){resources.push(stream);return stream}
+async function cleanup(){clearInterval(renderTimer);clearInterval(tickTimer);resources.forEach(stream=>stream.getTracks().forEach(track=>track.stop()));resources=[];hardware=null;if(audio){await audio.close().catch(()=>{});audio=null}}
+async function videoFor(stream){const video=document.createElement('video');video.muted=true;video.playsInline=true;video.srcObject=stream;await video.play();if(!video.videoWidth)await new Promise((resolve,reject)=>{video.onloadedmetadata=resolve;setTimeout(()=>reject(new Error('The source did not supply video.')),10000)});return video}
+async function prepare(settings){if(['recording','paused','countdown','saving'].includes(phase))throw new Error('A recording is already running.');await cleanup();generation++;options=settings;phase='preparing';started=0;pausedAt=pausedTotal=0;metadata={};error='';warning='';emit();const needsVideo=settings.mode==='camera'||settings.overlay;try{if(needsVideo||settings.mic)hardware=hold(await navigator.mediaDevices.getUserMedia({video:needsVideo?{height:{ideal:+settings.quality},frameRate:{ideal:+settings.fps}}:false,audio:!!settings.mic}));return{ok:true}}catch(e){await cleanup();phase='idle';emit();return{ok:false,permissionNeeded:e.name==='NotAllowedError',camera:!!needsVideo,mic:!!settings.mic,error:e.message}}}
+async function start(source){const token=generation;try{
+  let stream;
+  if(options.mode==='camera'){if(!hardware)throw new Error('Camera permission is required.');stream=hardware}
+  else{const mandatory={chromeMediaSource:source.kind==='tab'?'tab':'desktop',chromeMediaSourceId:source.streamId};const videoConstraints={...mandatory,maxFrameRate:+options.fps};if(source.kind==='tab'&&source.width&&source.height){videoConstraints.minWidth=videoConstraints.maxWidth=Math.round(source.width*source.dpr);videoConstraints.minHeight=videoConstraints.maxHeight=Math.round(source.height*source.dpr)}stream=hold(await navigator.mediaDevices.getUserMedia({video:{mandatory:videoConstraints},audio:source.audio?{mandatory}:false}))}
+  const video=await videoFor(stream);const r=source.region;const region=r?{x:r.x*video.videoWidth/r.viewportWidth,y:r.y*video.videoHeight/r.viewportHeight,w:r.w*video.videoWidth/r.viewportWidth,h:r.h*video.videoHeight/r.viewportHeight}:{x:0,y:0,w:video.videoWidth,h:video.videoHeight};
+  let camera=null;if(options.mode!=='camera'&&options.overlay&&hardware)camera=await videoFor(hardware);
+  const canvas=document.createElement('canvas'),scale=Math.min(1,+options.quality/region.h);canvas.width=Math.max(2,Math.round(region.w*scale/2)*2);canvas.height=Math.max(2,Math.round(region.h*scale/2)*2);const ctx=canvas.getContext('2d',{alpha:false});
+  const draw=()=>{ctx.drawImage(video,region.x,region.y,region.w,region.h,0,0,canvas.width,canvas.height);if(camera){const w=canvas.width*.22,h=w*camera.videoHeight/camera.videoWidth,m=canvas.width*.025;ctx.save();ctx.beginPath();ctx.roundRect(canvas.width-w-m,canvas.height-h-m,w,h,Math.min(18,h/8));ctx.clip();ctx.drawImage(camera,canvas.width-w-m,canvas.height-h-m,w,h);ctx.restore()}};draw();renderTimer=setInterval(draw,1000/+options.fps);const output=hold(canvas.captureStream(+options.fps));
+  const tracks=new Map();for(const s of [stream,hardware].filter(Boolean))for(const track of s.getAudioTracks())tracks.set(track.id,track);
+  if(tracks.size){audio=new AudioContext();await audio.resume();const mix=audio.createMediaStreamDestination();for(const track of tracks.values())audio.createMediaStreamSource(new MediaStream([track])).connect(mix);mix.stream.getAudioTracks().forEach(track=>output.addTrack(track));if(source.kind==='tab'&&stream.getAudioTracks().length)audio.createMediaStreamSource(new MediaStream(stream.getAudioTracks())).connect(audio.destination)}
+  if(options.systemAudio&&options.mode!=='camera'&&!stream.getAudioTracks().length)warning='The selected source did not share audio.';
+  const types=options.format==='mp4'?['video/mp4;codecs=avc1.424028,mp4a.40.2','video/mp4']:['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'];const mime=types.find(type=>MediaRecorder.isTypeSupported(type));if(!mime)throw new Error('This video format is unavailable. Choose WebM.');
+  metadata={width:canvas.width,height:canvas.height,fps:+options.fps,bitrate:+options.bitrate,mime};const chunks=[];recorder=new MediaRecorder(output,{mimeType:mime,videoBitsPerSecond:+options.bitrate*1000000,audioBitsPerSecond:128000});
+  recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)};
+  recorder.onstop=async()=>{const duration=elapsed();phase='saving';emit();const blob=new Blob(chunks,{type:recorder.mimeType||mime});recorder=null;await cleanup();try{if(!blob.size)throw new Error('No recording data was produced.');const item={id:crypto.randomUUID(),type:'video',blob,name:`Recording · ${new Date().toLocaleString()}`,created:Date.now(),duration,meta:metadata};await captureOperation('put',item);notifyCaptures();lastCaptureId=item.id;phase='complete';emit()}catch(e){error=e.message;phase='error';emit()}};
+  recorder.onerror=e=>{error=e.error?.message||'The recording failed.';stop()};
+  stream.getVideoTracks()[0].addEventListener('ended',()=>{if(['recording','paused'].includes(phase))stop();else if(phase==='countdown')abort()});
+  phase='countdown';for(let count=+options.countdown;count>0;count--){metadata.countdown=count;emit();await new Promise(resolve=>setTimeout(resolve,1000));if(token!==generation)throw new DOMException('Recording cancelled','AbortError')}
+  if(token!==generation||stream.getVideoTracks()[0].readyState==='ended')throw new DOMException('Recording cancelled','AbortError');delete metadata.countdown;started=Date.now();recorder.start(1000);phase='recording';tickTimer=setInterval(emit,1000);emit();return{ok:true};
+}catch(e){recorder=null;await cleanup();error=e.name==='AbortError'?'':e.message;phase=e.name==='AbortError'?'idle':'error';emit();return{ok:false,error:e.message}}}
+function pause(){if(recorder?.state==='recording'){recorder.pause();pausedAt=Date.now();phase='paused';emit()}return state()}
+function resume(){if(recorder?.state==='paused'){recorder.resume();pausedTotal+=Date.now()-pausedAt;pausedAt=0;phase='recording';emit()}return state()}
+function stop(){if(recorder&&recorder.state!=='inactive'){if(pausedAt){pausedTotal+=Date.now()-pausedAt;pausedAt=0}phase='saving';clearInterval(tickTimer);recorder.stop();emit()}return state()}
+async function abort(){if(['recording','paused'].includes(phase))return stop();generation++;recorder=null;await cleanup();started=0;phase='idle';emit();return state()}
+const engineTarget=location.pathname.endsWith('/source.html')?'desktop-recorder':'recorder';
+chrome.runtime.onMessage.addListener((message,sender,reply)=>{if(message.target!==engineTarget)return;const work=message.command==='prepare'?prepare(message.settings):message.command==='start'?start(message.source):message.command==='pause'?Promise.resolve(pause()):message.command==='resume'?Promise.resolve(resume()):message.command==='stop'?Promise.resolve(stop()):message.command==='abort'?abort():Promise.resolve(state());work.then(reply).catch(e=>reply({ok:false,error:e.message}));return true});
+
+export {prepare,start,state,abort};
+
+if(engineTarget==='desktop-recorder')window.addEventListener('beforeunload',event=>{if(['recording','paused','countdown','saving'].includes(phase)){event.preventDefault();event.returnValue='Recording is still running.'}});

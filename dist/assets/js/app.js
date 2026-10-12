@@ -1,3 +1,4 @@
+import {enhanceDropdowns,refreshDropdowns} from './dropdown.js';
 import { captureOperation } from './capture-store.js';
 const $=id=>document.getElementById(id);
 let mode='desktop',kind='record',busy=false,recorder=null,resources=[],audioContext=null,renderTimer=null,clockTimer=null,started=0,pausedAt=0,pausedTotal=0,recordMeta={},db,library=[],objectURLs=[];
@@ -6,7 +7,7 @@ const formatTime=ms=>{const s=Math.floor(ms/1000);return `${String(Math.floor(s/
 const dateName=()=>new Date().toLocaleString(undefined,{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
 const mimeFor=format=>(format==='mp4'?['video/mp4;codecs=avc1.424028,mp4a.40.2','video/mp4']:['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm']).find(t=>globalThis.MediaRecorder?.isTypeSupported(t));
 if(!mimeFor('mp4')){$('format').querySelector('[value="mp4"]').disabled=true}
-function specs(){ $('spec').textContent=`${$('quality').value==='2160'?'4K':$('quality').value+'p'} / ${$('fps').value} fps / ${$('format').value==='mp4'?'MP4':'WebM'}`; }
+function specs(){ refreshDropdowns(); $('spec').textContent=`${$('quality').value==='2160'?'4K':$('quality').value+'p'} / ${$('fps').value} fps / ${$('format').value==='mp4'?'MP4':'WebM'}`; }
 ['quality','fps','format','mic','systemAudio','overlay','bitrate','countdown'].forEach(id=>{try{const saved=JSON.parse(localStorage.getItem('capture-settings')||'{}');if(id in saved){if($(id).type==='checkbox')$(id).checked=saved[id];else if(!$(id).querySelector(`option[value="${saved[id]}"]`)?.disabled)$(id).value=saved[id]}}catch{}$(id).addEventListener('change',()=>{specs();const s={};['quality','fps','format','mic','systemAudio','overlay','bitrate','countdown'].forEach(k=>s[k]=$(k).type==='checkbox'?$(k).checked:$(k).value);try{localStorage.setItem('capture-settings',JSON.stringify(s))}catch{}})});specs();
 document.querySelectorAll('.mode').forEach(button=>button.onclick=()=>{if(busy)return;mode=button.dataset.mode;document.querySelectorAll('.mode').forEach(b=>{b.classList.toggle('selected',b===button);b.setAttribute('aria-pressed',b===button)});$('overlay').disabled=mode==='camera';status(mode==='tab'?'Select a browser tab in the sharing picker.':mode==='region'?'Share a source, then drag the area to capture.':'Choose a source when your browser asks.')});
 function setKind(value){if(busy)return;kind=value;for(const [id,k] of [['recordTab','record'],['shotTab','shot']]){$(id).classList.toggle('active',k===kind);$(id).setAttribute('aria-selected',k===kind)}$('recordOptions').hidden=kind==='shot';$('shotHint').hidden=kind!=='shot';$('start').innerHTML=kind==='record'?'<span>●</span> Start recording <span class="arrow">↗</span>':'<span>▣</span> Capture screenshot <span class="arrow">↗</span>'}
@@ -56,6 +57,7 @@ window.addEventListener('focus',()=>libraryChannel.onmessage());
 $('editorLink').addEventListener('click',event=>{const id=new URL($('editorLink').href).searchParams.get('capture');const session=editorSessions.get(id);if(!session)return;event.preventDefault();session.tab=window.open(session.url,'_blank');if(session.item)deliverEditor(session,session.item)});
 if(new URLSearchParams(location.search).get('view')==='library')document.querySelector('[data-view="library"]').click();
 // Extension popup hands selected recorder options to a persistent recording tab.
+enhanceDropdowns(document.querySelectorAll('#recordOptions select'));
 const recordSession=new URLSearchParams(location.search).get('recordSession');
 if(recordSession&&globalThis.chrome?.runtime?.id&&chrome.storage?.local){
   $('start').disabled=true;

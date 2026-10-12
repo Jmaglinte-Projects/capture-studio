@@ -1,19 +1,23 @@
 {
   "manifest_version": 3,
   "name": "Capture Studio",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Capture the visible tab, full scrolling page, or selected area directly into an editor. Record screen and camera locally.",
   "permissions": [
     "activeTab",
     "scripting",
     "storage",
     "unlimitedStorage",
-    "clipboardWrite"
+    "clipboardWrite",
+    "offscreen",
+    "tabCapture",
+    "desktopCapture"
   ],
   "action": {
     "default_popup": "popup.html"
   },
   "background": {
-    "service_worker": "background.js"
-  }
+    "service_worker": "assets/js/background.js"
+  },
+  "minimum_chrome_version": "116"
 }
