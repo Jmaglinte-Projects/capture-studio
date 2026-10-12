@@ -20,3 +20,11 @@ In `chrome://extensions` (or `edge://extensions`), enable Developer mode, choose
 ## Verification
 
 Browser tests passed in Chrome 154 using synthetic media: actual MediaRecorder video/audio encoding at 1920 × 1080, pause/resume, PNG editing and undo, IndexedDB persistence and renaming, responsive mobile width, and no page errors. A synthetic 2560 × 1440 display stream additionally verified canvas scaling, encoded video playback, custom-area recording, and permission refusal cleanup. Real screen/camera hardware permission prompts and installation of the companion extension remain manual checks.
+
+## Dedicated screenshot editor
+
+Screenshot capture and library Edit now open `editor.html` in a separate tab. The editor provides pen, rectangle, ellipse, directional arrows, inline multiline text, opaque redaction, select/move/delete, stroke and font size controls, zoom, undo/redo, and explicit Apply/Cancel crop. Copy image writes the rendered PNG to the clipboard through the browser Clipboard API; Download PNG exports it, and Save to library updates the existing capture. Edits remain in the editor until saved; closing with unsaved edits asks for confirmation. Screenshots are initially stored in the local library so the editor can reload independently.
+
+A waiting tab is reserved during the capture click to accommodate popup restrictions; the browser's capture request is invoked before opening it so transient user activation is preserved. If a browser blocks the editor tab, use the Open screenshot editor link. Clipboard denial and unsupported image-copy APIs show a download alternative. The editor and studio exchange capture updates through IndexedDB and a same-origin message handoff; screenshots are not uploaded.
+
+Additional browser verification: new-tab handoff, redaction output pixels, drawing colors after cancelled crops, select/move/delete, multiline text, all drawing tools, reverse-direction crop with exact output dimensions, undo/redo across crops, real clipboard PNG readback, PNG download, edited-image persistence and reload, popup blocker recovery, clipboard refusal feedback, and mobile width. `tests/editor.cjs` exercises these paths with a synthetic display stream.

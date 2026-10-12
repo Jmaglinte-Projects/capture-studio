@@ -1,0 +1,4 @@
+let opening;
+export function openCaptureDB(){return opening??=new Promise((resolve,reject)=>{const request=indexedDB.open('capture-studio',1);request.onupgradeneeded=()=>request.result.createObjectStore('captures',{keyPath:'id'});request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error)})}
+export async function captureOperation(action,value){const db=await openCaptureDB();return new Promise((resolve,reject)=>{const tx=db.transaction('captures',action==='get'||action==='getAll'?'readonly':'readwrite');const request=tx.objectStore('captures')[action](...(value===undefined?[]:[value]));tx.oncomplete=()=>resolve(request.result);tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error)})}
+export function notifyCaptures(){const channel=new BroadcastChannel('capture-studio-library');channel.postMessage('changed');channel.close()}
