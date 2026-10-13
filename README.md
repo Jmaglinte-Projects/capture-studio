@@ -56,3 +56,5 @@ HTML entry points remain at the root so existing URLs and editor links keep work
 ## Annotation update (1.3.1)
 
 Arrows use a filled, tapered shape. Inline text has a transparent background. Drag an existing arrow, text label, or pen stroke while its tool is active, or choose Select to move any annotation. Pen and arrow selection follow their visible shapes. Movement supports undo/redo. A focused check in `tests/annotation-update.cjs` covers these interactions.
+
+Selected annotations also support center-based rotation: enter an angle in degrees, turn in 15° increments, or Reset. Rotation is included in copied/downloaded images and supports undo/redo; rotated annotations remain draggable.
