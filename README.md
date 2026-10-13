@@ -1,3 +1,5 @@
+<img src="popup.png" alt="Capture Studio popup" width="360">
+
 # Capture Studio
 
 Capture Studio is a local screen recorder and screenshot tool for desktop Chrome and Edge. Use it on your own machine when you want a specific capture feature without subscribing to a commercial extension.
