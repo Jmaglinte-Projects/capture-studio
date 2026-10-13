@@ -22,7 +22,32 @@ $('resetRotation').onclick=()=>rotateSelected(0);
 $('rotation').onchange=()=>rotateSelected($('rotation').valueAsNumber);
 function drawMark(context,mark){context.save();if(mark.rotation){const center=markCenter(mark);context.translate(center.x,center.y);context.rotate(mark.rotation*Math.PI/180);context.translate(-center.x,-center.y)}context.strokeStyle=mark.color;context.fillStyle=mark.color;context.lineWidth=mark.width;context.lineCap='round';context.lineJoin='round';context.setLineDash([]);if(mark.type==='text'){context.font=`600 ${mark.size}px system-ui, sans-serif`;context.textBaseline='top';mark.text.split('\n').forEach((line,i)=>context.fillText(line,mark.x,mark.y+i*mark.size*1.25))}else if(mark.type==='pen'){context.beginPath();mark.points.forEach((p,i)=>i?context.lineTo(p.x,p.y):context.moveTo(p.x,p.y));if(mark.points.length===1){context.arc(mark.points[0].x,mark.points[0].y,mark.width/2,0,Math.PI*2);context.fill()}else context.stroke()}else if(mark.type==='arrow'){const points=arrowPolygon(mark);if(points.length){context.beginPath();points.forEach((p,i)=>i?context.lineTo(p.x,p.y):context.moveTo(p.x,p.y));context.closePath();context.fill()}}else{const b=localBounds(mark);if(mark.type==='rect')context.strokeRect(b.x,b.y,b.w,b.h);if(mark.type==='ellipse'){context.beginPath();context.ellipse(b.x+b.w/2,b.y+b.h/2,b.w/2,b.h/2,0,0,Math.PI*2);context.stroke()}if(mark.type==='redact'){context.fillStyle='#000';context.fillRect(Math.floor(b.x),Math.floor(b.y),Math.ceil(b.w),Math.ceil(b.h))}}context.restore()}
 function render(){if(!base)return;if(canvas.width!==base.width||canvas.height!==base.height){canvas.width=overlay.width=base.width;canvas.height=overlay.height=base.height}ctx.clearRect(0,0,canvas.width,canvas.height);ctx.drawImage(base,0,0);marks.forEach(mark=>drawMark(ctx,mark));renderOverlay();$('dimensions').textContent=`${canvas.width} × ${canvas.height} px`;$('undo').disabled=!history.length;$('redo').disabled=!future.length;$('deleteMark').disabled=selected<0;for(const key of ['rotateLeft','rotateRight','resetRotation','rotation'])$(key).disabled=selected<0;$('rotation').value=selected<0?'0':String(Math.round((marks[selected].rotation||0)*10)/10);$('cropActions').hidden=!crop||(gesture?.type==='draw'&&tool==='crop');if(crop)$('cropSize').textContent=`Crop to ${Math.round(crop.w)} × ${Math.round(crop.h)} px`}
-function renderOverlay(){previewCtx.clearRect(0,0,overlay.width,overlay.height);previewCtx.save();if(selected>=0&&marks[selected]){const b=bounds(marks[selected]);previewCtx.strokeStyle='#4f7ff5';previewCtx.lineWidth=Math.max(1,1/currentScale());previewCtx.setLineDash([5/currentScale(),4/currentScale()]);previewCtx.strokeRect(b.x-4,b.y-4,b.w+8,b.h+8)}if(crop){previewCtx.fillStyle='#16233780';previewCtx.fillRect(0,0,overlay.width,overlay.height);previewCtx.clearRect(crop.x,crop.y,crop.w,crop.h);previewCtx.strokeStyle='#fff';previewCtx.lineWidth=2/currentScale();previewCtx.setLineDash([6/currentScale(),4/currentScale()]);previewCtx.strokeRect(crop.x,crop.y,crop.w,crop.h)}else if(gesture?.mark)drawMark(previewCtx,gesture.mark);previewCtx.restore()}
+function selectionHandles(mark){
+ const b=localBounds(mark),center=markCenter(mark),angle=mark.rotation||0;
+ const transform=p=>rotatePoint(p,center,angle);
+ const handles=mark.type==='arrow'?[{kind:'endpoint',index:0,...transform({x:mark.x,y:mark.y})},{kind:'endpoint',index:1,...transform({x:mark.x+mark.w,y:mark.y+mark.h})}]:[{x:b.x,y:b.y},{x:b.x+b.w,y:b.y},{x:b.x+b.w,y:b.y+b.h},{x:b.x,y:b.y+b.h}].map((point,index)=>({kind:'resize',index,...transform(point)}));
+ const top=transform({x:center.x,y:b.y}),rotation=transform({x:center.x,y:b.y-26/currentScale()}),margin=8/currentScale();
+ handles.push({kind:'rotate',x:Math.max(margin,Math.min(canvas.width-margin,rotation.x)),y:Math.max(margin,Math.min(canvas.height-margin,rotation.y)),stem:top});
+ return handles;
+}
+function handleAt(point){if(selected<0||!marks[selected]||crop)return null;return selectionHandles(marks[selected]).find(h=>Math.hypot(point.x-h.x,point.y-h.y)<=10/currentScale())||null}
+function renderOverlay(){
+ previewCtx.clearRect(0,0,overlay.width,overlay.height);previewCtx.save();
+ if(selected>=0&&marks[selected]&&!crop){
+  const mark=marks[selected],b=localBounds(mark),center=markCenter(mark),handles=selectionHandles(mark);
+  if(!['arrow','ellipse'].includes(mark.type)){
+   const corners=[{x:b.x,y:b.y},{x:b.x+b.w,y:b.y},{x:b.x+b.w,y:b.y+b.h},{x:b.x,y:b.y+b.h}].map(p=>rotatePoint(p,center,mark.rotation||0));
+   previewCtx.strokeStyle='#4f7ff5';previewCtx.lineWidth=1/currentScale();previewCtx.setLineDash([4/currentScale(),4/currentScale()]);previewCtx.beginPath();corners.forEach((p,i)=>i?previewCtx.lineTo(p.x,p.y):previewCtx.moveTo(p.x,p.y));previewCtx.closePath();previewCtx.stroke();
+  }
+  previewCtx.setLineDash([]);
+  for(const h of handles){
+   if(h.kind==='rotate'){previewCtx.strokeStyle='#91a0b6';previewCtx.lineWidth=1/currentScale();previewCtx.beginPath();previewCtx.moveTo(h.stem.x,h.stem.y);previewCtx.lineTo(h.x,h.y);previewCtx.stroke()}
+   previewCtx.beginPath();previewCtx.arc(h.x,h.y,(h.kind==='rotate'?5:6)/currentScale(),0,Math.PI*2);previewCtx.fillStyle=h.kind==='rotate'?'#169447':'#1685ff';previewCtx.strokeStyle='#fff';previewCtx.lineWidth=2/currentScale();previewCtx.fill();previewCtx.stroke();
+  }
+ }
+ if(crop){previewCtx.fillStyle='#16233780';previewCtx.fillRect(0,0,overlay.width,overlay.height);previewCtx.clearRect(crop.x,crop.y,crop.w,crop.h);previewCtx.strokeStyle='#fff';previewCtx.lineWidth=2/currentScale();previewCtx.setLineDash([6/currentScale(),4/currentScale()]);previewCtx.strokeRect(crop.x,crop.y,crop.w,crop.h)}else if(gesture?.mark)drawMark(previewCtx,gesture.mark);
+ previewCtx.restore();
+}
 function currentScale(){return canvas.getBoundingClientRect().width/canvas.width||1}
 function fit(){refreshDropdowns();if(!base)return;const choice=$('zoom').value;const scale=choice==='fit'?Math.min(1,Math.max(50,$('workspace').clientWidth-50)/canvas.width,Math.max(50,$('workspace').clientHeight-50)/canvas.height):+choice;$('canvasHolder').style.width=`${Math.max(1,canvas.width*scale)}px`;$('canvasHolder').style.height=`${Math.max(1,canvas.height*scale)}px`;renderOverlay()}
 new ResizeObserver(fit).observe($('workspace'));$('zoom').onchange=fit;
@@ -33,15 +58,57 @@ function commitText(){if(!textPoint)return;const text=$('inlineText').value.trim
 function cancelText(){textPoint=null;$('inlineText').hidden=true}
 function startText(point,text='',index=-1){textPoint=point;const input=$('inlineText');input.value=text;input.style.left=`${point.x/canvas.width*100}%`;input.style.top=`${point.y/canvas.height*100}%`;input.style.fontSize=`${+$('fontSize').value*currentScale()}px`;input.style.color=$('color').value;input.hidden=false;input.focus()}
 $('inlineText').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();commitText()}if(e.key==='Escape'){e.preventDefault();cancelText()}};
-function setTool(next){commitText();gesture=null;crop=null;selected=-1;tool=next;document.querySelectorAll('[data-tool]').forEach(b=>{b.classList.toggle('active',b.dataset.tool===next);b.setAttribute('aria-pressed',b.dataset.tool===next)});overlay.style.cursor=next==='select'?'default':'crosshair';const hints={select:'Click an annotation to select it. Drag to move, use Rotation to turn it, or press Delete.',pen:'Drag to draw. Drag an existing pen stroke to move it; use Select to move any annotation.',rect:'Drag in any direction to draw a rectangle.',ellipse:'Drag to draw an ellipse.',arrow:'Drag toward the point to highlight. Drag an existing arrow to move it.',text:'Click to type, then press Enter. Drag existing text to move it. Shift + Enter adds a new line.',redact:'Drag over private information to cover its pixels with solid black.',crop:'Drag to choose an area, then select Apply crop. Cancel keeps the full image.'};$('toolHint').textContent=hints[next];render()}
+function setTool(next){commitText();gesture=null;crop=null;selected=-1;tool=next;document.querySelectorAll('[data-tool]').forEach(b=>{b.classList.toggle('active',b.dataset.tool===next);b.setAttribute('aria-pressed',b.dataset.tool===next)});overlay.style.cursor=next==='select'?'default':'crosshair';const hints={select:'Drag inside to move. Blue handles resize shapes or adjust arrow endpoints; the green handle rotates. Hold Shift to snap rotation or preserve proportions.',pen:'Drag to draw. Drag an existing pen stroke to move it; use Select to move any annotation.',rect:'Drag in any direction to draw a rectangle.',ellipse:'Drag to draw an ellipse.',arrow:'Drag to draw an arrow. Drag its blue endpoints to change length and direction, or drag inside to move it.',text:'Click to type, then press Enter. Drag existing text to move it. Shift + Enter adds a new line.',redact:'Drag over private information to cover its pixels with solid black.',crop:'Drag to choose an area, then select Apply crop. Cancel keeps the full image.'};$('toolHint').textContent=hints[next];render()}
 document.querySelectorAll('[data-tool]').forEach(b=>b.onclick=()=>setTool(b.dataset.tool));
 function hit(point,type=null){for(let i=marks.length-1;i>=0;i--){const mark=marks[i];if(type&&mark.type!==type)continue;const local=rotatePoint(point,markCenter(mark),-(mark.rotation||0));const pad=Math.max(6/currentScale(),mark.width/2);if(mark.type==='arrow'){if(polygonHit(local,arrowPolygon(mark),pad))return i;continue}if(mark.type==='pen'){if(mark.points.length===1&&segmentDistance(local,mark.points[0],mark.points[0])<=pad)return i;for(let j=1;j<mark.points.length;j++)if(segmentDistance(local,mark.points[j-1],mark.points[j])<=pad)return i;continue}const b=localBounds(mark);if(local.x>=b.x-pad&&local.x<=b.x+b.w+pad&&local.y>=b.y-pad&&local.y<=b.y+b.h+pad)return i}return -1}
 function moveMark(mark,dx,dy){if(mark.type==='pen')mark.points.forEach(p=>{p.x+=dx;p.y+=dy});else{mark.x+=dx;mark.y+=dy}}
-overlay.onpointerdown=e=>{if(!base||e.button!==0||gesture)return;e.preventDefault();commitText();const point=position(e);const picked=tool==='select'?hit(point):['arrow','text','pen'].includes(tool)?hit(point,tool):-1;if(tool==='text'&&picked<0){startText(point);return}overlay.setPointerCapture(e.pointerId);if(tool==='select'||picked>=0){selected=picked;gesture=selected<0?null:{type:'move',pointer:e.pointerId,start:point,original:structuredClone(marks[selected]),before:cloneMarks()};render();return}crop=null;selected=-1;gesture={type:'draw',pointer:e.pointerId,start:point,mark:tool==='crop'?null:{type:tool,x:point.x,y:point.y,w:0,h:0,points:[point],color:$('color').value,width:+$('stroke').value}};render()};
-overlay.onpointermove=e=>{if(!gesture||gesture.pointer!==e.pointerId)return;const point=position(e);if(gesture.type==='move'){marks[selected]=structuredClone(gesture.original);moveMark(marks[selected],point.x-gesture.start.x,point.y-gesture.start.y);render();return}if(tool==='crop'){crop=rect(gesture.start,point);render()}else{const mark=gesture.mark;if(mark.type==='pen')mark.points.push(point);else{mark.w=point.x-gesture.start.x;mark.h=point.y-gesture.start.y}renderOverlay()}};
-function endGesture(e){if(!gesture||gesture.pointer!==e.pointerId)return;overlay.onpointermove(e);const active=gesture;gesture=null;if(active.type==='move'){const changed=JSON.stringify(active.before)!==JSON.stringify(marks);if(changed){history.push({base,marks:active.before});if(history.length>50)history.shift();future=[];dirty=true}}else if(tool==='crop'){if(!crop||crop.w<2||crop.h<2)crop=null;else crop={x:Math.floor(crop.x),y:Math.floor(crop.y),w:Math.floor(crop.w),h:Math.floor(crop.h)}}else if(active.mark.type==='pen'||Math.abs(active.mark.w)>1||Math.abs(active.mark.h)>1){checkpoint();marks.push(active.mark);selected=marks.length-1}render()}
+function resizeMark(original,handle,point,keepAspect){
+ const mark=structuredClone(original),b=localBounds(original),center=markCenter(original),angle=original.rotation||0;
+ const local=rotatePoint(point,center,-angle),right=handle.index===1||handle.index===2,bottom=handle.index>=2;
+ const anchor={x:right?b.x:b.x+b.w,y:bottom?b.y:b.y+b.h};
+ let width=Math.max(2,right?local.x-anchor.x:anchor.x-local.x),height=Math.max(2,bottom?local.y-anchor.y:anchor.y-local.y);
+ if(keepAspect||mark.type==='text'){const scale=Math.max(.05,Math.max(width/Math.max(1,b.w),height/Math.max(1,b.h)));width=Math.max(1,b.w)*scale;height=Math.max(1,b.h)*scale}
+ let x=right?anchor.x:anchor.x-width,y=bottom?anchor.y:anchor.y-height;
+ if(mark.type==='text'){
+  mark.size=Math.max(4,original.size*width/Math.max(1,b.w));const measured=localBounds(mark);width=measured.w;height=measured.h;
+  mark.x=right?anchor.x:anchor.x-width;mark.y=bottom?anchor.y:anchor.y-height;
+ }else if(mark.type==='pen'){
+  mark.points=original.points.map(p=>({x:x+(p.x-b.x)*width/Math.max(1,b.w),y:y+(p.y-b.y)*height/Math.max(1,b.h)}));
+ }else{mark.x=x;mark.y=y;mark.w=width;mark.h=height}
+ // Keep the opposite corner fixed in world space, even for a rotated object.
+ const nextCenter=markCenter(mark),worldCenter=rotatePoint(nextCenter,center,angle);moveMark(mark,worldCenter.x-nextCenter.x,worldCenter.y-nextCenter.y);
+ return mark;
+}
+overlay.onpointerdown=e=>{
+ if(!base||e.button!==0||gesture)return;e.preventDefault();commitText();const point=position(e),handle=handleAt(point);
+ if(handle){overlay.setPointerCapture(e.pointerId);gesture={type:handle.kind,handle,pointer:e.pointerId,start:point,original:structuredClone(marks[selected]),before:cloneMarks()};render();return}
+ const picked=tool==='select'?hit(point):tool!=='crop'?hit(point,tool):-1;
+ if(tool==='text'&&picked<0){startText(point);return}
+ overlay.setPointerCapture(e.pointerId);
+ if(tool==='select'||picked>=0){selected=picked;gesture=selected<0?null:{type:'move',pointer:e.pointerId,start:point,original:structuredClone(marks[selected]),before:cloneMarks()};render();return}
+ crop=null;selected=-1;gesture={type:'draw',pointer:e.pointerId,start:point,mark:tool==='crop'?null:{type:tool,x:point.x,y:point.y,w:0,h:0,points:[point],color:$('color').value,width:+$('stroke').value}};render();
+};
+overlay.onpointermove=e=>{
+ const point=position(e);
+ if(!gesture){const handle=handleAt(point);overlay.style.cursor=handle?(handle.kind==='rotate'?'grab':handle.kind==='endpoint'?'crosshair':handle.index%2?'nesw-resize':'nwse-resize'):hit(point,tool==='select'?null:tool)>=0?'move':tool==='select'?'default':'crosshair';return}
+ if(gesture.pointer!==e.pointerId)return;
+ if(gesture.type==='move'){marks[selected]=structuredClone(gesture.original);moveMark(marks[selected],point.x-gesture.start.x,point.y-gesture.start.y);render();return}
+ if(gesture.type==='rotate'){
+  const center=markCenter(gesture.original),start=Math.atan2(gesture.start.y-center.y,gesture.start.x-center.x),now=Math.atan2(point.y-center.y,point.x-center.x);
+  let angle=(gesture.original.rotation||0)+(now-start)*180/Math.PI;if(e.shiftKey)angle=Math.round(angle/15)*15;
+  marks[selected]={...structuredClone(gesture.original),rotation:((angle%360)+360)%360};overlay.style.cursor='grabbing';render();return;
+ }
+ if(gesture.type==='endpoint'){
+  const original=gesture.original,center=markCenter(original),tail=rotatePoint({x:original.x,y:original.y},center,original.rotation||0),tip=rotatePoint({x:original.x+original.w,y:original.y+original.h},center,original.rotation||0);
+  const from=gesture.handle.index===0?point:tail,to=gesture.handle.index===1?point:tip;
+  if(Math.hypot(to.x-from.x,to.y-from.y)>=2)marks[selected]={...original,x:from.x,y:from.y,w:to.x-from.x,h:to.y-from.y,rotation:0};render();return;
+ }
+ if(gesture.type==='resize'){marks[selected]=resizeMark(gesture.original,gesture.handle,point,e.shiftKey);render();return}
+ if(tool==='crop'){crop=rect(gesture.start,point);render()}else{const mark=gesture.mark;if(mark.type==='pen')mark.points.push(point);else{mark.w=point.x-gesture.start.x;mark.h=point.y-gesture.start.y}renderOverlay()}
+};
+function endGesture(e){if(!gesture||gesture.pointer!==e.pointerId)return;overlay.onpointermove(e);const active=gesture;gesture=null;if(active.type!=='draw'){const changed=JSON.stringify(active.before)!==JSON.stringify(marks);if(changed){history.push({base,marks:active.before});if(history.length>50)history.shift();future=[];dirty=true}}else if(tool==='crop'){if(!crop||crop.w<2||crop.h<2)crop=null;else crop={x:Math.floor(crop.x),y:Math.floor(crop.y),w:Math.floor(crop.w),h:Math.floor(crop.h)}}else if(active.mark.type==='pen'||Math.abs(active.mark.w)>1||Math.abs(active.mark.h)>1){checkpoint();marks.push(active.mark);selected=marks.length-1}render()}
 overlay.onpointerup=endGesture;
-function cancelGesture(){if(gesture?.type==='move')marks=gesture.before;gesture=null;crop=null;render()}
+function cancelGesture(){if(gesture&&gesture.type!=='draw')marks=gesture.before;gesture=null;crop=null;render()}
 overlay.onpointercancel=cancelGesture;overlay.onlostpointercapture=()=>{if(gesture)cancelGesture()};
 function applyCrop(){if(!crop)return;commitText();const area=crop;checkpoint();render();const next=document.createElement('canvas');next.width=area.w;next.height=area.h;next.getContext('2d').drawImage(canvas,area.x,area.y,area.w,area.h,0,0,area.w,area.h);base=next;marks=[];crop=null;selected=-1;render();fit();status('Crop applied. Undo restores the full image.')}
 $('applyCrop').onclick=applyCrop;$('cancelCrop').onclick=()=>{crop=null;render();status('Crop cancelled.')};

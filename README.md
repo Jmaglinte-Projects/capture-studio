@@ -58,3 +58,7 @@ HTML entry points remain at the root so existing URLs and editor links keep work
 Arrows use a filled, tapered shape. Inline text has a transparent background. Drag an existing arrow, text label, or pen stroke while its tool is active, or choose Select to move any annotation. Pen and arrow selection follow their visible shapes. Movement supports undo/redo. A focused check in `tests/annotation-update.cjs` covers these interactions.
 
 Selected annotations also support center-based rotation: enter an angle in degrees, turn in 15° increments, or Reset. Rotation is included in copied/downloaded images and supports undo/redo; rotated annotations remain draggable.
+
+## Direct annotation handles (1.3.3)
+
+Selected arrows have two blue endpoint handles for changing direction and length. Other annotations have four blue corner handles for resizing; text scales proportionally. A green handle rotates the selected annotation around its center. Hold Shift for 15° rotation snapping or proportional resizing. Drag inside to move. Handle size remains consistent at different zoom levels. These controls appear only in the editor overlay, so they are excluded from exported images.
