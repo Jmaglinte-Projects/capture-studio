@@ -62,3 +62,7 @@ Selected annotations also support center-based rotation: enter an angle in degre
 ## Direct annotation handles (1.3.3)
 
 Selected arrows have two blue endpoint handles for changing direction and length. Other annotations have four blue corner handles for resizing; text scales proportionally. A green handle rotates the selected annotation around its center. Hold Shift for 15° rotation snapping or proportional resizing. Drag inside to move. Handle size remains consistent at different zoom levels. These controls appear only in the editor overlay, so they are excluded from exported images.
+
+## Recording preview (1.4.0)
+
+Finished recordings now open `preview.html` automatically after saving. The preview offers video playback, an explicit Save name action, and a download named after the recording. Download preserves the format selected before recording (MP4 or WebM); it does not transcode between containers. Existing library videos have a Preview button. In the extension, the worker opens one preview tab per completed capture, including current-tab recordings when the popup is closed. If the web app cannot save because storage is full, it keeps the recording on the current page for download.

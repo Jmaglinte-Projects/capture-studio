@@ -1,0 +1,6 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Recording preview · Capture Studio</title><link rel="stylesheet" href="assets/css/preview.css"></head><body>
+<header><a class="brand" href="index.html">◉ <b>Capture Studio</b></a><a href="index.html?view=library">My captures ↗</a></header>
+<main><div class="heading"><div><span class="eyebrow">RECORDING SAVED LOCALLY</span><h1 id="title">Your recording</h1><p id="details">Loading recording…</p></div><button id="download" class="primary" disabled>Download video</button></div>
+<div class="player"><video id="video" controls playsinline preload="metadata" aria-label="Recording preview" hidden></video><p id="loading">Opening your recording…</p></div>
+<form id="renameForm"><label for="name">Recording name</label><div class="name-row"><input id="name" maxlength="180" autocomplete="off" disabled><button id="rename" type="submit" disabled>Save name</button></div><p class="hint">The saved name is also used for your download. Downloads use the MP4 or WebM format selected before recording.</p></form>
+<p id="status" role="status" aria-live="polite"></p></main><script type="module" src="assets/js/preview.js"></script></body></html>
