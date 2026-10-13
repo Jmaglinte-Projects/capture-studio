@@ -52,3 +52,7 @@ Extension browser checks passed for all screenshot modes, exactly one screenshot
 - `tests/`: development browser verification scripts; excluded from the extension package.
 
 HTML entry points remain at the root so existing URLs and editor links keep working. Record settings now use the same dropdown design as the editor. After updating the unpacked extension, click Reload in `chrome://extensions`. Captures remain in extension-local IndexedDB until downloaded; downloads use Chrome’s configured download location.
+
+## Annotation update (1.3.1)
+
+Arrows use a filled, tapered shape. Inline text has a transparent background. Drag an existing arrow, text label, or pen stroke while its tool is active, or choose Select to move any annotation. Pen and arrow selection follow their visible shapes. Movement supports undo/redo. A focused check in `tests/annotation-update.cjs` covers these interactions.
