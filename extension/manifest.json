@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Capture Studio",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "description": "Capture the visible tab, full scrolling page, or selected area directly into an editor. Record screen and camera locally.",
   "permissions": [
     "activeTab",
@@ -14,10 +14,22 @@
     "desktopCapture"
   ],
   "action": {
-    "default_popup": "popup.html"
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "assets/icons/icon-16.png",
+      "32": "assets/icons/icon-32.png",
+      "48": "assets/icons/icon-48.png",
+      "128": "assets/icons/icon-128.png"
+    }
   },
   "background": {
     "service_worker": "assets/js/background.js"
   },
-  "minimum_chrome_version": "116"
+  "minimum_chrome_version": "116",
+  "icons": {
+    "16": "assets/icons/icon-16.png",
+    "32": "assets/icons/icon-32.png",
+    "48": "assets/icons/icon-48.png",
+    "128": "assets/icons/icon-128.png"
+  }
 }
