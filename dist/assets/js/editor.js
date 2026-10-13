@@ -7,6 +7,13 @@ const id=new URLSearchParams(location.search).get('capture');
 let importing=null;
 let base=null,marks=[],history=[],future=[],tool='pen',selected=-1,gesture=null,crop=null,textPoint=null,item=null,loading=false,loaded=false,dirty=false,pollTimer;
 function status(message,error=false){$('editorStatus').textContent=message;$('editorStatus').classList.toggle('error',error)}
+let toastTimer;
+function actionNotice(message,kind='success'){
+ clearTimeout(toastTimer);const toast=$('actionToast');toast.dataset.kind=kind;$('toastMessage').textContent=message;$('toastIcon').textContent=kind==='error'?'!':kind==='pending'?'…':'✓';toast.hidden=false;
+ status(message,kind==='error');
+ if(kind!=='pending')toastTimer=setTimeout(()=>toast.hidden=true,kind==='error'?8000:4500);
+}
+$('dismissToast').onclick=()=>{clearTimeout(toastTimer);$('actionToast').hidden=true};
 function cloneMarks(){return structuredClone(marks)}
 function checkpoint(){history.push({base,marks:cloneMarks()});if(history.length>50)history.shift();future=[];dirty=true}
 function restore(state){base=state.base;marks=state.marks;selected=-1;gesture=null;crop=null;dirty=true;render();fit()}
@@ -120,9 +127,22 @@ $('deleteMark').onclick=deleteSelected;
 for(const key of ['color','stroke','fontSize'])$(key).onchange=()=>{if(selected<0)return;checkpoint();if(key==='color')marks[selected].color=$(key).value;if(key==='stroke')marks[selected].width=+$(key).value;if(key==='fontSize'&&marks[selected].type==='text')marks[selected].size=+$(key).value;render()};
 window.addEventListener('keydown',e=>{if(['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName))return;if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='z'){e.preventDefault();e.shiftKey?redo():undo();return}if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='y'){e.preventDefault();redo();return}if(e.metaKey||e.ctrlKey||e.altKey)return;if(e.key==='Escape'){cancelText();cancelGesture();selected=-1;render()}if(e.key==='Delete'||e.key==='Backspace'){e.preventDefault();deleteSelected()}const next={v:'select',p:'pen',r:'rect',e:'ellipse',a:'arrow',t:'text',b:'redact',c:'crop'}[e.key.toLowerCase()];if(next)setTool(next)});
 function png(){commitText();if(crop)throw new Error('Apply or cancel the crop before copying or saving.');return new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(new Error('Could not export this image.')),'image/png'))}
-$('copy').onclick=()=>{if(!loaded)return;try{if(!navigator.clipboard?.write||!globalThis.ClipboardItem)throw new Error('Image copying is unavailable in this browser. Use Download PNG.');const promise=png();const operation=navigator.clipboard.write([new ClipboardItem({'image/png':promise})]);operation.then(()=>status('Image copied. Paste it with ⌘V or Ctrl+V.')).catch(e=>status(e.name==='NotAllowedError'?'Clipboard access was denied. Allow clipboard access or download the PNG.':e.message,true))}catch(e){status(e.message,true)}};
-$('download').onclick=async()=>{try{const blob=await png();const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=`${(item?.name||'Screenshot').replace(/[^a-z0-9 _-]/gi,'').trim()||'Screenshot'}.png`;link.click();setTimeout(()=>URL.revokeObjectURL(url),30000);status('PNG downloaded.')}catch(e){status(e.message,true)}};
-$('save').onclick=async()=>{try{const blob=await png();item={...item,blob,meta:{...item.meta,width:canvas.width,height:canvas.height},updated:Date.now()};await captureOperation('put',item);notifyCaptures();dirty=false;status('Edited screenshot saved to your capture library.')}catch(e){status('Could not save: '+e.message+'. Copy or download to keep your edits.',true)}};
+$('copy').onclick=()=>{
+ if(!loaded)return;$('copy').disabled=true;actionNotice('Copying image…','pending');
+ try{
+  if(!navigator.clipboard?.write||!globalThis.ClipboardItem)throw new Error('Image copying is unavailable in this browser. Use Download PNG.');
+  const promise=png(),operation=navigator.clipboard.write([new ClipboardItem({'image/png':promise})]);
+  operation.then(()=>actionNotice('Image copied. Paste with ⌘V or Ctrl+V.')).catch(e=>actionNotice(e.name==='NotAllowedError'?'Clipboard access was denied. Allow access or download the PNG.':e.message,'error')).finally(()=>$('copy').disabled=false);
+ }catch(e){actionNotice(e.message,'error');$('copy').disabled=false}
+};
+$('download').onclick=async()=>{
+ if(!loaded)return;$('download').disabled=true;actionNotice('Preparing PNG download…','pending');
+ try{const blob=await png(),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=`${(item?.name||'Screenshot').replace(/[^a-z0-9 _-]/gi,'').trim()||'Screenshot'}.png`;link.click();setTimeout(()=>URL.revokeObjectURL(url),30000);actionNotice('PNG download started.')}catch(e){actionNotice(e.message,'error')}finally{$('download').disabled=false}
+};
+$('save').onclick=async()=>{
+ if(!loaded)return;$('save').disabled=true;actionNotice('Saving edits…','pending');
+ try{const blob=await png(),updated={...item,blob,meta:{...item.meta,width:canvas.width,height:canvas.height},updated:Date.now()};await captureOperation('put',updated);item=updated;notifyCaptures();dirty=false;actionNotice('Edits saved to My captures in this browser.')}catch(e){actionNotice('Could not save: '+e.message+'. Copy or download to keep your edits.','error')}finally{$('save').disabled=false}
+};
 window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue=''}});
 async function loadCapture(capture){if(loaded||loading||!capture?.blob)return;loading=true;try{const image=await createImageBitmap(capture.blob);base=document.createElement('canvas');base.width=image.width;base.height=image.height;base.getContext('2d').drawImage(image,0,0);image.close();item=capture;loaded=true;clearInterval(pollTimer);$('loading').hidden=true;$('canvasHolder').hidden=false;document.querySelectorAll('button').forEach(b=>b.disabled=false);render();fit();status(capture.meta?.truncated?'Page captured up to 16,000 pixels. Edit, copy, or download it.':capture.meta?.scaled?'Large screenshot resized to fit the editor. Edit, copy, or download it.':'Screenshot ready. Edit, copy, download, or save to your library.')}catch(e){status('Could not open the screenshot: '+e.message,true)}finally{loading=false}}
 window.addEventListener('message',e=>{if(e.origin===location.origin&&e.source===window.opener&&e.data?.type==='capture-ready'&&e.data.id===id)loadCapture(e.data.item)});
