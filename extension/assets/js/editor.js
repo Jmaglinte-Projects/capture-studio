@@ -4,6 +4,13 @@ import {enhanceDropdowns,refreshDropdowns} from './dropdown.js';
 import {captureOperation,notifyCaptures} from './capture-store.js';
 const $=id=>document.getElementById(id),canvas=$('canvas'),overlay=$('overlay'),ctx=canvas.getContext('2d'),previewCtx=overlay.getContext('2d');
 const id=new URLSearchParams(location.search).get('capture');
+// Remember color independently of annotation selection or saving the screenshot.
+const editorColorKey='capture-studio-editor-color';
+try{const saved=localStorage.getItem(editorColorKey);if(/^#[0-9a-f]{6}$/i.test(saved||''))$('color').value=saved}catch{}
+function rememberColor(){try{localStorage.setItem(editorColorKey,$('color').value)}catch{}}
+$('color').addEventListener('input',rememberColor);
+$('color').addEventListener('change',rememberColor);
+
 let importing=null;
 let base=null,marks=[],history=[],future=[],tool='pen',selected=-1,gesture=null,crop=null,textPoint=null,item=null,loading=false,loaded=false,dirty=false,pollTimer;
 function status(message,error=false){$('editorStatus').textContent=message;$('editorStatus').classList.toggle('error',error)}

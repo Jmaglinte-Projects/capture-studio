@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Capture Studio",
-  "version": "1.4.2",
+  "version": "1.4.3",
   "description": "Capture the visible tab, full scrolling page, or selected area directly into an editor. Record screen and camera locally.",
   "permissions": [
     "activeTab",
